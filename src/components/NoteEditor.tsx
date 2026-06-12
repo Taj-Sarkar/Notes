@@ -214,11 +214,11 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const promptBgImage = () => setShowBgDialog(true);
 
   const compileFullMarkdown = (): string => {
-    let md = '';
-    blocks.forEach(b => {
-      md += b.type === 'text' ? `${b.content}\n\n` : `- [${b.checked ? 'x' : ' '}] ${b.content}\n`;
-    });
-    return md;
+    // Only compile text blocks — task blocks are rendered separately
+    return blocks
+      .filter(b => b.type === 'text')
+      .map(b => b.content)
+      .join('\n\n');
   };
 
   if (!isOpen) return null;
@@ -424,7 +424,35 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 </div>
               </div>
             ) : (
-              <MarkdownRenderer content={compileFullMarkdown()} />
+              <div className="space-y-1">
+                {blocks.map(b => {
+                  if (b.type === 'text') {
+                    return (
+                      <div key={b.id}>
+                        <MarkdownRenderer content={b.content} />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={b.id} className="flex items-start gap-3 py-1 px-0.5">
+                      <div className={`mt-[3px] w-4 h-4 shrink-0 border flex items-center justify-center ${
+                        b.checked ? 'bg-white border-white' : 'border-zinc-600'
+                      }`}>
+                        {b.checked && (
+                          <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                            <path d="M1 3.5L3.5 6L8 1" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className={`text-sm font-mono leading-relaxed ${
+                        b.checked ? 'line-through text-zinc-600' : 'text-zinc-300'
+                      }`}>
+                        {b.content || <span className="text-zinc-700 italic">empty task</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
