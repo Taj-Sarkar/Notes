@@ -244,7 +244,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       {bg && <div className="absolute inset-0 bg-[#080808]/95 pointer-events-none" />}
 
       {/* ── TOP NAV ─────────────────────────────────────────────── */}
-      <header className="relative z-10 flex items-center justify-between px-6 py-3 border-b border-white/[0.07] bg-[#0a0a0a]/90 backdrop-blur-sm shrink-0">
+      <header className="relative z-20 flex items-center justify-between px-6 py-3 border-b border-white/[0.07] bg-[#0a0a0a]/90 backdrop-blur-sm shrink-0">
+
 
         {/* Left cluster */}
         <div className="flex items-center gap-5 min-w-0">
