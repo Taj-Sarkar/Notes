@@ -4,13 +4,18 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, ChevronDown, Image as ImageIcon, Eye, EyeOff, Trash2, Plus, CornerUpLeft, CornerUpRight, FileText, CheckSquare, Layers } from 'lucide-react';
+import {
+  ArrowLeft, ChevronDown, Image as ImageIcon, Trash2, Plus,
+  CornerUpLeft, CornerUpRight, FileText, Layers, X
+} from 'lucide-react';
 import { Note, Block, BlockType } from '../types';
 import { MarkdownEditorBlock } from './MarkdownEditorBlock';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { ConfirmDialog } from './ConfirmDialog';
+import { InputDialog } from './InputDialog';
 
 interface NoteEditorProps {
-  note: Note | null; // null means new note
+  note: Note | null;
   categories: string[];
   isOpen: boolean;
   onClose: () => void;
@@ -26,42 +31,36 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   onSave,
   onDelete,
 }) => {
-  // Local note editing state
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [bg, setBg] = useState('');
-  const [dimmed, setDimmed] = useState(false);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-
-  // View state: 'edit' (block by block editing) or 'preview' (unified compilation rendered in HTML/Markdown)
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
-  
-  // Custom category dropdown status
   const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
-  const selectRef = useRef<HTMLDivElement>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showBgDialog, setShowBgDialog]           = useState(false);
 
-  // Undo / Redo Stacks (stored in refs for raw speed and to prevent state mismatch)
+  const [titleScrolled, setTitleScrolled] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const selectRef = useRef<HTMLDivElement>(null);
   const historyStack = useRef<string[]>([]);
   const redoStack = useRef<string[]>([]);
   const lastPushedState = useRef<string>('');
 
-  // Setup/Sync local state when note changes
   useEffect(() => {
     if (isOpen) {
       historyStack.current = [];
       redoStack.current = [];
-      setViewMode('edit');
-      
+      setViewMode('preview');
+
       if (note) {
         setTitle(note.title);
         setCategory(note.category);
         setBg(note.bg);
-        setDimmed(note.dimmed);
-        // Ensure each block has an id for safe React rendering (guard against missing blocks in older saved notes)
         const blocksWithIds = (note.blocks ?? []).map(b => ({
           ...b,
-          id: b.id || Math.random().toString(36).substring(2, 9)
+          id: b.id || Math.random().toString(36).substring(2, 9),
         }));
         setBlocks(blocksWithIds);
         lastPushedState.current = JSON.stringify({ title: note.title, blocks: blocksWithIds });
@@ -69,7 +68,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         setTitle('');
         setCategory(categories[0] || 'GENERAL');
         setBg('');
-        setDimmed(false);
         const initialBlocks = [{ id: Math.random().toString(36).substring(2, 9), type: 'text' as BlockType, content: '' }];
         setBlocks(initialBlocks);
         lastPushedState.current = JSON.stringify({ title: '', blocks: initialBlocks });
@@ -77,7 +75,6 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     }
   }, [note, isOpen, categories]);
 
-  // Click outside to close category dropdown
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (selectRef.current && !selectRef.current.contains(e.target as Node)) {
@@ -88,94 +85,78 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Keyboard capture for Global Undo/Redo inside the active editor
+  // Show title in header when it scrolls out of view
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = titleRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setTitleScrolled(!entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isOpen]);
+
   useEffect(() => {
     const handleGlobalKeys = (e: KeyboardEvent) => {
       if (!isOpen) return;
+      // Only intercept undo/redo when editor is open and focus is inside it
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
-        handleUndo();
+        handlersRef.current.undo();
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
-        handleRedo();
+        handlersRef.current.redo();
       }
     };
     document.addEventListener('keydown', handleGlobalKeys);
     return () => document.removeEventListener('keydown', handleGlobalKeys);
-  }, [isOpen, title, blocks]);
+  }, [isOpen]);
 
-  // Helper: push state for undo tracking
+  // Ref so the keydown handler always calls the latest undo/redo without stale closures
+  const handlersRef = useRef({ undo: () => {}, redo: () => {} });
+
   const pushStateToHistory = (customTitle = title, customBlocks = blocks) => {
-    const nextState = { title: customTitle, blocks: customBlocks };
-    const serialized = JSON.stringify(nextState);
-    
-    // Only push if different from last saved history capture
+    const serialized = JSON.stringify({ title: customTitle, blocks: customBlocks });
     if (serialized !== lastPushedState.current) {
       historyStack.current.push(lastPushedState.current);
       lastPushedState.current = serialized;
-      redoStack.current = []; // Clear redo stack on manual state push
-      
-      // Limit history stack size
-      if (historyStack.current.length > 50) {
-        historyStack.current.shift();
-      }
+      redoStack.current = [];
+      if (historyStack.current.length > 50) historyStack.current.shift();
     }
   };
 
   const handleUndo = () => {
-    if (historyStack.current.length === 0) return;
-    
-    // Capture current state of input for redo stack
-    const currentSerialized = JSON.stringify({ title, blocks });
-    redoStack.current.push(currentSerialized);
-    
-    // Pop and apply history
-    const previousStateStr = historyStack.current.pop()!;
-    const previousState = JSON.parse(previousStateStr);
-    
-    setTitle(previousState.title);
-    setBlocks(previousState.blocks);
-    lastPushedState.current = previousStateStr;
+    if (!historyStack.current.length) return;
+    redoStack.current.push(JSON.stringify({ title, blocks }));
+    const prev = JSON.parse(historyStack.current.pop()!);
+    setTitle(prev.title);
+    setBlocks(prev.blocks);
+    lastPushedState.current = JSON.stringify(prev);
   };
 
   const handleRedo = () => {
-    if (redoStack.current.length === 0) return;
-    
-    // Capture state for undo stack
-    const currentSerialized = JSON.stringify({ title, blocks });
-    historyStack.current.push(currentSerialized);
-    
-    // Pop and apply redo
-    const nextStateStr = redoStack.current.pop()!;
-    const nextState = JSON.parse(nextStateStr);
-    
-    setTitle(nextState.title);
-    setBlocks(nextState.blocks);
-    lastPushedState.current = nextStateStr;
+    if (!redoStack.current.length) return;
+    historyStack.current.push(JSON.stringify({ title, blocks }));
+    const next = JSON.parse(redoStack.current.pop()!);
+    setTitle(next.title);
+    setBlocks(next.blocks);
+    lastPushedState.current = JSON.stringify(next);
   };
 
-  // Block handlers
+  // Keep the ref up to date on every render
+  handlersRef.current = { undo: handleUndo, redo: handleRedo };
+
   const handleUpdateBlock = (id: string, content: string, checked?: boolean) => {
-    // Determine if we should push history (push snapshot *before* modifying state)
-    // To prevent spamming history on every single keystroke, we snap before updates or periodically
-    const timerId = setTimeout(() => {
-      pushStateToHistory(title, blocks);
-    }, 400);
-
-    setBlocks(prev => prev.map(b => {
-      if (b.id === id) {
-        return { ...b, content, checked };
-      }
-      return b;
-    }));
-
+    const timerId = setTimeout(() => pushStateToHistory(title, blocks), 400);
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, content, checked } : b));
     return () => clearTimeout(timerId);
   };
 
   const handleDeleteBlock = (id: string) => {
     if (blocks.length <= 1) {
-      // Don't leave document with absolutely 0 elements, clear out instead
       pushStateToHistory();
       setBlocks([{ id: Math.random().toString(36).substring(2, 9), type: 'text', content: '' }]);
       return;
@@ -190,31 +171,21 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       id: Math.random().toString(36).substring(2, 9),
       type,
       content: '',
-      checked: type === 'task' ? false : undefined
+      checked: type === 'task' ? false : undefined,
     };
-    
     setBlocks(prev => [...prev, newBlock]);
     setActiveBlockId(newBlock.id);
-
-    // Dynamic focus
     setTimeout(() => {
-      const editorBlock = document.getElementById(`editor-block-${blocks.length}`);
-      if (editorBlock) {
-        editorBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
+      const el = document.getElementById(`editor-block-${blocks.length}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 50);
   };
 
-  // Block Navigation Actions
   const handleMoveBlockUp = (index: number) => {
     if (index === 0) return;
     pushStateToHistory();
     setBlocks(prev => {
-      const copy = [...prev];
-      const temp = copy[index];
-      copy[index] = copy[index - 1];
-      copy[index - 1] = temp;
-      return copy;
+      const c = [...prev]; [c[index], c[index - 1]] = [c[index - 1], c[index]]; return c;
     });
   };
 
@@ -222,106 +193,96 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     if (index === blocks.length - 1) return;
     pushStateToHistory();
     setBlocks(prev => {
-      const copy = [...prev];
-      const temp = copy[index];
-      copy[index] = copy[index + 1];
-      copy[index + 1] = temp;
-      return copy;
+      const c = [...prev]; [c[index], c[index + 1]] = [c[index + 1], c[index]]; return c;
     });
   };
 
-  // Save changes and exit
   const handleSaveAndClose = () => {
     const finalTitle = title.trim() || 'UNTITLED';
-    // Clean blank block items
     const filledBlocks = blocks.filter(b => b.content.trim() !== '');
-    
-    const savedNote: Note = {
+    onSave({
       id: note ? note.id : Date.now(),
       title: finalTitle,
       category,
       bg,
-      dimmed,
-      blocks: filledBlocks.length > 0 ? filledBlocks : [{ id: Math.random().toString(36).substring(2, 9), type: 'text', content: '' }]
-    };
-
-    onSave(savedNote);
+      dimmed: false,
+      blocks: filledBlocks.length > 0 ? filledBlocks : [{ id: Math.random().toString(36).substring(2, 9), type: 'text', content: '' }],
+    });
     onClose();
   };
 
-  // Background control
-  const promptBgImage = () => {
-    const url = prompt('ENTER IMAGE URL FOR BACKGROUND:');
-    if (url !== null) {
-      setBg(url);
-    }
-  };
+  const promptBgImage = () => setShowBgDialog(true);
 
-  // Compile entire Note blocks into a single markdown string
   const compileFullMarkdown = (): string => {
-    let md = `# ${title || 'UNTITLED'}\n\n`;
-    blocks.forEach((b) => {
-      if (b.type === 'text') {
-        md += `${b.content}\n\n`;
-      } else {
-        md += `- [${b.checked ? 'x' : ' '}] ${b.content}\n`;
-      }
+    let md = '';
+    blocks.forEach(b => {
+      md += b.type === 'text' ? `${b.content}\n\n` : `- [${b.checked ? 'x' : ' '}] ${b.content}\n`;
     });
     return md;
   };
 
   if (!isOpen) return null;
 
+  const canUndo = historyStack.current.length > 0;
+  const canRedo = redoStack.current.length > 0;
+
   return (
-    <div 
-      className={`fixed inset-0 w-full h-full bg-[#090909] z-100 flex flex-col transition-transform duration-200 select-none ${
-        isOpen ? 'translate-y-0 opacity-100 pointer-events-all' : 'translate-y-5 opacity-0 pointer-events-none'
-      }`}
-    >
-      {/* Background Graphic Layer */}
+    <>
+    <div className="fixed inset-0 w-full h-full z-[100] flex flex-col font-mono">
+
+      {/* Background layer */}
       {bg && (
-        <div 
-          className="absolute inset-0 bg-cover bg-center -z-1 transition-opacity duration-300 pointer-events-none"
+        <div
+          className="absolute inset-0 bg-cover bg-center pointer-events-none"
           style={{ backgroundImage: `url('${bg}')` }}
         />
       )}
-      
-      <div 
-        className="absolute inset-0 bg-[#090909] -z-1 transition-opacity duration-300 pointer-events-none opacity-[0.92]"
-      />
+      <div className="absolute inset-0 bg-[#080808] pointer-events-none" />
+      {bg && <div className="absolute inset-0 bg-[#080808]/95 pointer-events-none" />}
 
-      {/* Editor top header actions */}
-      <div className="w-full border-b border-[#333333] px-6 py-4 flex flex-wrap justify-between items-center gap-3 bg-[#090909]/95 backdrop-blur-[4px] z-10 relative select-none">
-        
-        {/* Left Side: Back & Category Dropdown */}
-        <div className="flex items-center gap-4">
-          <button 
+      {/* ── TOP NAV ─────────────────────────────────────────────── */}
+      <header className="relative z-10 flex items-center justify-between px-6 py-3 border-b border-white/[0.07] bg-[#0a0a0a]/90 backdrop-blur-sm shrink-0">
+
+        {/* Left cluster */}
+        <div className="flex items-center gap-5 min-w-0">
+          {/* Back */}
+          <button
             onClick={handleSaveAndClose}
-            className="text-xs font-bold font-mono tracking-widest text-[#888888] hover:text-white transition-colors duration-150 flex items-center gap-2 border-r border-[#333333] pr-4 cursor-pointer"
+            className="flex items-center gap-2 text-zinc-500 hover:text-white text-xs tracking-widest transition-colors duration-150 cursor-pointer shrink-0"
           >
-            <ArrowLeft size={14} /> BACK
+            <ArrowLeft size={13} />
+            <span className="hidden sm:inline">BACK</span>
           </button>
 
-          {/* Custom sharp category select dropdown */}
-          <div className="relative" ref={selectRef}>
-            <div 
-              onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
-              className="flex items-center justify-between border border-[#333333] hover:border-white px-3 py-1.5 text-[11px] text-zinc-300 font-mono tracking-wider min-w-[130px] bg-[#090909] cursor-pointer select-none"
-            >
-              <span className="font-bold text-white uppercase">{category}</span>
-              <ChevronDown size={11} className="text-zinc-500" />
-            </div>
+          <div className="w-px h-4 bg-white/10 shrink-0" />
 
+          {/* Title slides in here when scrolled */}
+          <span
+            className={`text-sm font-bold text-white tracking-tight truncate transition-all duration-200 ${
+              titleScrolled ? 'opacity-100 max-w-[260px]' : 'opacity-0 max-w-0 overflow-hidden'
+            }`}
+          >
+            {title || 'Untitled'}
+          </span>
+
+          {/* Category picker — hides when title is showing to save space */}
+          <div className={`relative transition-all duration-200 ${titleScrolled ? 'opacity-0 w-0 overflow-hidden pointer-events-none' : 'opacity-100'}`} ref={selectRef}>
+            <button
+              onClick={() => setIsCatDropdownOpen(v => !v)}
+              className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-white tracking-widest uppercase transition-colors cursor-pointer"
+            >
+              {category}
+              <ChevronDown size={10} className="text-zinc-600" />
+            </button>
             {isCatDropdownOpen && (
-              <div className="absolute top-[100%] left-0 right-0 max-h-[180px] bg-[#121212] border border-[#333333] border-t-0 z-50 overflow-y-auto shadow-xl">
-                {categories.map((cat) => (
+              <div className="absolute top-full left-0 mt-1 min-w-[130px] bg-[#111] border border-white/10 shadow-2xl z-50">
+                {categories.map(cat => (
                   <div
                     key={cat}
-                    onClick={() => {
-                      setCategory(cat);
-                      setIsCatDropdownOpen(false);
-                    }}
-                    className="p-2.5 text-[11px] text-[#888888] font-mono hover:bg-white hover:text-black transition-colors duration-100 cursor-pointer uppercase font-bold"
+                    onClick={() => { setCategory(cat); setIsCatDropdownOpen(false); }}
+                    className={`px-4 py-2 text-[11px] tracking-widest uppercase cursor-pointer transition-colors font-bold ${
+                      cat === category ? 'text-white bg-white/5' : 'text-zinc-500 hover:text-white hover:bg-white/5'
+                    }`}
                   >
                     {cat}
                   </div>
@@ -330,24 +291,22 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             )}
           </div>
 
-          {/* Dynamic tabs: Segmented Edit or Full Markdown Document view */}
-          <div className="flex border border-[#333333] p-0.5 bg-black ml-1 select-none">
+          <div className="w-px h-4 bg-white/10" />
+
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setViewMode('edit')}
-              className={`px-3 py-1 text-[10px] tracking-widest font-mono cursor-pointer flex items-center gap-1.5 duration-150 ${
-                viewMode === 'edit' 
-                  ? 'bg-white text-black font-bold' 
-                  : 'text-zinc-500 hover:text-white'
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest transition-colors cursor-pointer ${
+                viewMode === 'edit' ? 'text-white bg-white/10' : 'text-zinc-600 hover:text-zinc-300'
               }`}
             >
-              <FileText size={10} /> BLOCKS
+              <FileText size={10} /> EDIT
             </button>
             <button
               onClick={() => setViewMode('preview')}
-              className={`px-3 py-1 text-[10px] tracking-widest font-mono cursor-pointer flex items-center gap-1.5 duration-150 ${
-                viewMode === 'preview' 
-                  ? 'bg-white text-black font-bold' 
-                  : 'text-zinc-500 hover:text-white'
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest transition-colors cursor-pointer ${
+                viewMode === 'preview' ? 'text-white bg-white/10' : 'text-zinc-600 hover:text-zinc-300'
               }`}
             >
               <Layers size={10} /> PREVIEW
@@ -355,120 +314,146 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Backdrops, Dim overlay and delete */}
+        {/* Right cluster */}
         <div className="flex items-center gap-2">
-          <button 
-            onClick={promptBgImage}
-            className="border border-[#333333] hover:border-white hover:bg-[#1e1e1e] px-3 py-1.5 text-xs text-zinc-400 hover:text-white font-mono tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Set Background Image"
-          >
-            <ImageIcon size={12} /> BG
-          </button>
-          {note && (
-            <button 
-              onClick={() => {
-                if (confirm('DELETE_ENTRY_PERMANENTLY?')) {
-                  onDelete(note.id);
-                  onClose();
-                }
-              }}
-              className="border border-red-950/40 text-red-500 hover:border-red-500 hover:bg-red-950/10 px-3 py-1.5 text-xs font-mono transition-all duration-100 flex items-center gap-1.5 cursor-pointer"
-              title="Delete Entry"
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Editor Body Area */}
-      <div className="flex-1 w-full overflow-y-auto select-text scrollbar-mono flex justify-center py-6 px-4 md:px-12">
-        <div className="w-full max-w-[800px] mb-48">
-          
-          {/* Note Slate Title Box */}
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => {
-              pushStateToHistory(e.target.value, blocks);
-              setTitle(e.target.value);
-            }}
-            placeholder="UNTITLED_NOTE"
-            className="w-full bg-transparent border-none text-2xl md:text-3.5xl font-extrabold focus:ring-0 outline-none mb-6 font-mono tracking-tight text-white placeholder-zinc-800"
-          />
-
-          {viewMode === 'edit' ? (
-            /* Sub-component Block List Editor */
-            <div className="mt-4 space-y-2">
-              {blocks.map((block, idx) => (
-                <MarkdownEditorBlock
-                  key={block.id}
-                  block={block}
-                  index={idx}
-                  totalBlocks={blocks.length}
-                  isActive={activeBlockId === block.id}
-                  onFocus={() => setActiveBlockId(block.id)}
-                  onUpdate={(content, checked) => handleUpdateBlock(block.id, content, checked)}
-                  onDelete={() => handleDeleteBlock(block.id)}
-                  onMoveUp={() => handleMoveBlockUp(idx)}
-                  onMoveDown={() => handleMoveBlockDown(idx)}
-                />
-              ))}
-            </div>
-          ) : (
-            /* Compiled View Mode */
-            <div className="border border-zinc-800 bg-[#0c0c0c]/90 px-6 py-8 md:px-8 mt-4 rounded-none select-text shadow-2xl">
-              <MarkdownRenderer content={compileFullMarkdown()} />
-            </div>
-          )}
-
-        </div>
-      </div>
-
-      {/* Embedded footer floating toolbar */}
-      <div className="fixed bottom-8 left-[50%] -translate-x-[50%] bg-[#121212]/95 border border-[#333333] p-1.5 flex gap-2 items-center shadow-2xl z-[150] select-none rounded-none backdrop-blur-[2px]">
-        {/* Undo/Redo Controls */}
-        <div className="flex gap-0.5 border-r border-[#333333] pr-2 mr-1">
-          <button 
+          {/* Undo / Redo */}
+          <button
             onClick={handleUndo}
-            disabled={historyStack.current.length === 0}
-            className={`p-1.5 border border-[#1e1e1e] font-mono hover:bg-[#1e1e1e] text-xs flex items-center justify-center transition-all ${
-              historyStack.current.length > 0 
-                ? 'text-white hover:border-white duration-100 cursor-pointer' 
-                : 'text-zinc-700 hover:border-transparent opacity-40 cursor-not-allowed'
-            }`}
-            title="Undo"
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            className={`p-1.5 transition-colors cursor-pointer ${canUndo ? 'text-zinc-400 hover:text-white' : 'text-zinc-700 cursor-not-allowed'}`}
           >
             <CornerUpLeft size={13} />
           </button>
-          <button 
+          <button
             onClick={handleRedo}
-            disabled={redoStack.current.length === 0}
-            className={`p-1.5 border border-[#1e1e1e] font-mono hover:bg-[#1e1e1e] text-xs flex items-center justify-center transition-all ${
-              redoStack.current.length > 0 
-                ? 'text-white hover:border-white duration-100 cursor-pointer' 
-                : 'text-zinc-700 hover:border-transparent opacity-40 cursor-not-allowed'
-            }`}
-            title="Redo"
+            disabled={!canRedo}
+            title="Redo (Ctrl+Y)"
+            className={`p-1.5 transition-colors cursor-pointer ${canRedo ? 'text-zinc-400 hover:text-white' : 'text-zinc-700 cursor-not-allowed'}`}
           >
             <CornerUpRight size={13} />
           </button>
-        </div>
 
-        {/* Add Blocks Options */}
-        <button 
-          onClick={() => handleAddBlock('text')}
-          className="border border-[#1e1e1e] hover:border-zinc-400 hover:bg-[#1a1a1a] px-3.5 py-1.5 text-[10px] text-zinc-400 hover:text-white font-mono font-bold tracking-widest transition-all flex items-center gap-1.5 cursor-pointer"
-        >
-          <Plus size={12} /> TEXT
-        </button>
-        <button 
-          onClick={() => handleAddBlock('task')}
-          className="border border-[#1e1e1e] hover:border-zinc-400 hover:bg-[#1a1a1a] px-3.5 py-1.5 text-[10px] text-zinc-400 hover:text-white font-mono font-bold tracking-widest transition-all flex items-center gap-1.5 cursor-pointer"
-        >
-          <CheckSquare size={12} /> TASK
-        </button>
+          <div className="w-px h-4 bg-white/10 mx-1" />
+
+          {/* BG image */}
+          <button
+            onClick={promptBgImage}
+            title="Set background image"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] text-zinc-500 hover:text-white tracking-widest border border-white/[0.06] hover:border-white/20 transition-all cursor-pointer"
+          >
+            <ImageIcon size={11} /> BG
+          </button>
+
+          {/* Delete */}
+          {note && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              title="Delete note"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] text-red-600 hover:text-red-400 border border-red-900/30 hover:border-red-600/40 tracking-widest transition-all cursor-pointer"
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
+
+          {/* Close */}
+          <button
+            onClick={handleSaveAndClose}
+            title="Save and close"
+            className="p-1.5 text-zinc-600 hover:text-white transition-colors cursor-pointer ml-1"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </header>
+
+      {/* ── BODY ────────────────────────────────────────────────── */}
+      <div className="relative z-10 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[720px] px-6 pb-32">
+
+          {/* Title + meta */}
+          <div className="pt-10 pb-4">
+            <input
+              ref={titleRef}
+              type="text"
+              value={title}
+              onChange={e => { pushStateToHistory(e.target.value, blocks); setTitle(e.target.value); }}
+              placeholder="Untitled"
+              className="w-full bg-transparent border-none text-3xl font-bold text-white placeholder-zinc-800 focus:outline-none focus:ring-0 mb-1 tracking-tight"
+            />
+            <div className="flex items-center gap-3 text-[10px] text-zinc-600 tracking-widest uppercase">
+              <span>{category}</span>
+              <span>·</span>
+              <span>{blocks.length} {blocks.length === 1 ? 'block' : 'blocks'}</span>
+            </div>
+          </div>
+
+          {/* Blocks */}
+          <div className="pt-4">
+            {viewMode === 'edit' ? (
+              <div className="space-y-1">
+                {blocks.map((block, idx) => (
+                  <MarkdownEditorBlock
+                    key={block.id}
+                    block={block}
+                    index={idx}
+                    totalBlocks={blocks.length}
+                    isActive={activeBlockId === block.id}
+                    onFocus={() => setActiveBlockId(block.id)}
+                    onUpdate={(content, checked) => handleUpdateBlock(block.id, content, checked)}
+                    onDelete={() => handleDeleteBlock(block.id)}
+                    onMoveUp={() => handleMoveBlockUp(idx)}
+                    onMoveDown={() => handleMoveBlockDown(idx)}
+                  />
+                ))}
+
+                {/* Add block row */}
+                <div className="flex items-center gap-2 pt-6">
+                  <button
+                    onClick={() => handleAddBlock('text')}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] text-zinc-600 hover:text-white border border-dashed border-white/10 hover:border-white/30 tracking-widest transition-all cursor-pointer"
+                  >
+                    <Plus size={10} /> TEXT BLOCK
+                  </button>
+                  <button
+                    onClick={() => handleAddBlock('task')}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[10px] text-zinc-600 hover:text-white border border-dashed border-white/10 hover:border-white/30 tracking-widest transition-all cursor-pointer"
+                  >
+                    <Plus size={10} /> TASK BLOCK
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <MarkdownRenderer content={compileFullMarkdown()} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
+
+    {/* Delete note confirmation */}
+    <ConfirmDialog
+      isOpen={showDeleteConfirm}
+      title="DELETE NOTE"
+      message={`Delete "${title || 'Untitled'}" permanently? This cannot be undone.`}
+      confirmLabel="DELETE"
+      onConfirm={() => {
+        if (note) { onDelete(note.id); onClose(); }
+        setShowDeleteConfirm(false);
+      }}
+      onCancel={() => setShowDeleteConfirm(false)}
+    />
+
+    {/* Background image URL dialog */}
+    <InputDialog
+      isOpen={showBgDialog}
+      title="SET BACKGROUND IMAGE"
+      placeholder="https://example.com/image.jpg"
+      defaultValue={bg}
+      confirmLabel="SET"
+      onConfirm={url => { setBg(url); setShowBgDialog(false); }}
+      onCancel={() => setShowBgDialog(false)}
+    />
+  </>
   );
 };

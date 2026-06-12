@@ -99,19 +99,22 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
               />
             );
           },
+          hr: () => (
+            <hr className="my-6 border-none border-t border-zinc-800" />
+          ),
           h1: ({ children }) => (
-            <h1 className="text-xl font-bold mt-6 mb-3 text-white tracking-tight border-b border-zinc-800 pb-1 flex items-center gap-2">
-              <span className="text-zinc-500">#</span> {children}
+            <h1 className="text-xl font-bold mt-6 mb-3 text-white tracking-tight border-b border-zinc-800 pb-2">
+              {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-lg font-bold mt-5 mb-2 text-white flex items-center gap-2">
-              <span className="text-zinc-600">##</span> {children}
+            <h2 className="text-lg font-bold mt-5 mb-2 text-white">
+              {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-base font-bold mt-4 mb-2 text-zinc-300 flex items-center gap-2">
-              <span className="text-zinc-700">###</span> {children}
+            <h3 className="text-base font-bold mt-4 mb-2 text-zinc-300">
+              {children}
             </h3>
           ),
           p: ({ children }) => <p className="mb-3 text-zinc-300 text-sm">{children}</p>,
