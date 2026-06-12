@@ -1,0 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "JetBrains Mono", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+body {
+  background-color: #090909;
+  color: #ffffff;
+  font-family: "JetBrains Mono", monospace;
+  overflow-x: hidden;
+}
+
+/* Custom sharp scrollbars matching monochromatic aesthetics */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090909;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222222;
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+/* Mask utility gradient for note card body fade cuts */
+.mask-gradient {
+  mask-image: linear-gradient(to bottom, black 65%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 65%, transparent 100%);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Custom styles for select elements & lists */
+.scrollbar-mono::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-mono::-webkit-scrollbar-thumb {
+  background: #333333;
+}
+.scrollbar-mono::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+
+/* Highlight matching classes inside Prism highlighting */
+code[class*="language-"],
+pre[class*="language-"] {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+}

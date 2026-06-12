@@ -1,0 +1,6 @@
+{
+  "name": "Mono Note",
+  "description": "High-fidelity custom monochromatic text editor with robust Markdown formatting, block structures, syntax-highlighted code blocks, and canvas themes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
