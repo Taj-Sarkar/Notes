@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Folder, Plus, ChevronDown, Settings } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { Note } from './types';
 import { NoteCard } from './components/NoteCard';
@@ -16,6 +16,16 @@ import { AuthScreen } from './components/AuthScreen';
 import { SettingsPanel } from './components/SettingsPanel';
 
 const DEFAULT_CATEGORIES = ['PERSONAL', 'WORK', 'IDEAS', 'CODE'];
+
+// Firestore does not accept `undefined` values. Strip them from blocks before writing.
+const sanitizeNotes = (notes: Note[]): Note[] =>
+  notes.map(n => ({
+    ...n,
+    blocks: n.blocks.map(({ checked, ...rest }) =>
+      checked !== undefined ? { ...rest, checked } : rest
+    ),
+  }));
+
 
 const DEFAULT_NOTES: Note[] = [
   {
@@ -91,18 +101,15 @@ function NotesApp({ user }: { user: User }) {
 
   const notesReady       = useRef(false);
   const catsReady        = useRef(false);
-  const isEditorOpenRef  = useRef(false);
 
-  // Firestore real-time listeners
+  // Firestore real-time listeners — always on, safe because we write optimistically
   useEffect(() => {
     const unsubNotes = onSnapshot(notesDoc, snap => {
-      if (!isEditorOpenRef.current) {
-        if (snap.exists()) {
-          setNotes((snap.data().list as Note[]).map(n => ({ ...n, blocks: n.blocks ?? [] })));
-        } else {
-          setDoc(notesDoc, { list: DEFAULT_NOTES });
-          setNotes(DEFAULT_NOTES);
-        }
+      if (snap.exists()) {
+        setNotes((snap.data().list as Note[]).map(n => ({ ...n, blocks: n.blocks ?? [] })));
+      } else {
+        setDoc(notesDoc, { list: DEFAULT_NOTES });
+        setNotes(DEFAULT_NOTES);
       }
       notesReady.current = true;
       if (catsReady.current) setLoading(false);
@@ -123,14 +130,23 @@ function NotesApp({ user }: { user: User }) {
   }, [user.uid]);
 
   // Write helpers
-  const persistNotes = (updated: Note[]) => {
+  const persistNotes = async (updated: Note[]) => {
     setNotes(updated);
-    setDoc(notesDoc, { list: updated });
+    try {
+      await setDoc(notesDoc, { list: sanitizeNotes(updated) });
+    } catch (err) {
+      console.error('[Notes] Firestore write failed:', err);
+    }
   };
 
-  const persistCategories = (updated: string[]) => {
+
+  const persistCategories = async (updated: string[]) => {
     setCategories(updated);
-    setDoc(catsDoc, { list: updated });
+    try {
+      await setDoc(catsDoc, { list: updated });
+    } catch (err) {
+      console.error('[Categories] Firestore write failed:', err);
+    }
   };
 
   // Filters
@@ -153,7 +169,15 @@ function NotesApp({ user }: { user: User }) {
   const [isEditorOpen, setIsEditorOpen]         = useState(false);
   const [selectedNote, setSelectedNote]         = useState<Note | null>(null);
 
-  useEffect(() => { isEditorOpenRef.current = isEditorOpen; }, [isEditorOpen]);
+  const openEditor = (note: Note | null) => {
+    setSelectedNote(note);
+    setIsEditorOpen(true);
+  };
+
+  const handleEditorClose = () => {
+    setIsEditorOpen(false);
+    setSelectedNote(null);
+  };
 
   // Handlers
   const handleAddCategory = (newCat: string) => {
@@ -176,25 +200,33 @@ function NotesApp({ user }: { user: User }) {
   };
 
   const handleSaveNote = (savedNote: Note) => {
-    const exists  = notes.some(n => n.id === savedNote.id);
-    const updated = exists
-      ? notes.map(n => n.id === savedNote.id ? savedNote : n)
-      : [savedNote, ...notes];
-    persistNotes(updated);
+    // Use functional updater so we always operate on the freshest state.
+    // Side-effects (setDoc) run after the updater returns, outside React's render.
+    setNotes(prev => {
+      const exists  = prev.some(n => n.id === savedNote.id);
+      const updated = exists
+        ? prev.map(n => n.id === savedNote.id ? savedNote : n)
+        : [savedNote, ...prev];
+      // Schedule the Firestore write after this render cycle
+      setTimeout(() => {
+        setDoc(notesDoc, { list: sanitizeNotes(updated) }).catch(err =>
+          console.error('[Notes] Firestore write failed:', err)
+        );
+      }, 0);
+      return updated;
+    });
   };
 
   const handleDeleteNote = (id: number) => {
-    persistNotes(notes.filter(n => n.id !== id));
-  };
-
-  const handleEditorClose = async () => {
-    setIsEditorOpen(false);
-    setSelectedNote(null);
-    // Re-sync from Firestore after closing editor
-    const snap = await getDoc(notesDoc);
-    if (snap.exists()) {
-      setNotes((snap.data().list as Note[]).map(n => ({ ...n, blocks: n.blocks ?? [] })));
-    }
+    setNotes(prev => {
+      const updated = prev.filter(n => n.id !== id);
+      setTimeout(() => {
+        setDoc(notesDoc, { list: sanitizeNotes(updated) }).catch(err =>
+          console.error('[Notes] Firestore write failed:', err)
+        );
+      }, 0);
+      return updated;
+    });
   };
 
   const filteredNotes = activeFilter === 'ALL'
@@ -261,7 +293,7 @@ function NotesApp({ user }: { user: User }) {
             </button>
 
             <button
-              onClick={() => { setSelectedNote(null); setIsEditorOpen(true); }}
+              onClick={() => openEditor(null)}
               className="bg-white text-black border border-white px-4 py-2 text-xs font-bold tracking-wider hover:opacity-90 active:scale-95 duration-100 flex items-center gap-1.5 cursor-pointer font-mono"
             >
               <Plus size={14} /> NEW_ENTRY
@@ -282,7 +314,7 @@ function NotesApp({ user }: { user: User }) {
               <NoteCard
                 key={note.id}
                 note={note}
-                onClick={() => { setSelectedNote(note); setIsEditorOpen(true); }}
+                onClick={() => openEditor(note)}
               />
             ))}
           </div>

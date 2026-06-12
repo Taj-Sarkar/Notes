@@ -200,16 +200,19 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const handleSaveAndClose = () => {
     const finalTitle = title.trim() || 'UNTITLED';
     const filledBlocks = blocks.filter(b => b.content.trim() !== '');
-    onSave({
+    const savedNote = {
       id: note ? note.id : Date.now(),
       title: finalTitle,
       category,
       bg,
-      dimmed: false,
-      blocks: filledBlocks.length > 0 ? filledBlocks : [{ id: Math.random().toString(36).substring(2, 9), type: 'text', content: '' }],
-    });
+      dimmed: note?.dimmed ?? false,
+      blocks: filledBlocks.length > 0 ? filledBlocks : [{ id: Math.random().toString(36).substring(2, 9), type: 'text' as BlockType, content: '' }],
+    };
+    // Save first, then close — ensures the note is persisted before state resets
+    onSave(savedNote);
     onClose();
   };
+
 
   const promptBgImage = () => setShowBgDialog(true);
 
