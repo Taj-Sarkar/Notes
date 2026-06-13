@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, ChevronDown, Image as ImageIcon, Trash2, Plus,
-  CornerUpLeft, CornerUpRight, FileText, Layers, X
+  CornerUpLeft, CornerUpRight, FileText, Layers, X, MoreVertical
 } from 'lucide-react';
 import { Note, Block, BlockType } from '../types';
 import { MarkdownEditorBlock } from './MarkdownEditorBlock';
@@ -40,10 +40,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBgDialog, setShowBgDialog]           = useState(false);
+  const [isMenuOpen, setIsMenuOpen]               = useState(false);
 
   const [titleScrolled, setTitleScrolled] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLDivElement>(null);
+  const menuRef   = useRef<HTMLDivElement>(null);
   const historyStack = useRef<string[]>([]);
   const redoStack = useRef<string[]>([]);
   const lastPushedState = useRef<string>('');
@@ -79,6 +81,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (selectRef.current && !selectRef.current.contains(e.target as Node)) {
         setIsCatDropdownOpen(false);
+      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -248,7 +253,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
 
         {/* Left cluster */}
-        <div className="flex items-center gap-5 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-5 min-w-0">
           {/* Back */}
           <button
             onClick={handleSaveAndClose}
@@ -258,12 +263,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
             <span className="hidden sm:inline">BACK</span>
           </button>
 
-          <div className="w-px h-4 bg-white/10 shrink-0" />
+          <div className="w-px h-4 bg-white/10 shrink-0 hidden sm:block" />
 
           {/* Title slides in here when scrolled */}
           <span
             className={`text-sm font-bold text-white tracking-tight truncate transition-all duration-200 ${
-              titleScrolled ? 'opacity-100 max-w-[260px]' : 'opacity-0 max-w-0 overflow-hidden'
+              titleScrolled ? 'opacity-100 max-w-[120px] sm:max-w-[260px]' : 'opacity-0 max-w-0 overflow-hidden'
             }`}
           >
             {title || 'Untitled'}
@@ -273,10 +278,10 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           <div className={`relative transition-all duration-200 ${titleScrolled ? 'opacity-0 w-0 overflow-hidden pointer-events-none' : 'opacity-100'}`} ref={selectRef}>
             <button
               onClick={() => setIsCatDropdownOpen(v => !v)}
-              className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-white tracking-widest uppercase transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-white tracking-widest uppercase transition-colors cursor-pointer max-w-[80px] sm:max-w-none"
             >
-              {category}
-              <ChevronDown size={10} className="text-zinc-600" />
+              <span className="truncate">{category}</span>
+              <ChevronDown size={10} className="text-zinc-600 shrink-0" />
             </button>
             {isCatDropdownOpen && (
               <div className="absolute top-full left-0 mt-1 min-w-[130px] bg-[#111] border border-white/10 shadow-2xl z-50">
@@ -294,77 +299,101 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
               </div>
             )}
           </div>
-
-          <div className="w-px h-4 bg-white/10" />
-
-          {/* View mode toggle */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setViewMode('edit')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest transition-colors cursor-pointer ${
-                viewMode === 'edit' ? 'text-white bg-white/10' : 'text-zinc-600 hover:text-zinc-300'
-              }`}
-            >
-              <FileText size={10} /> EDIT
-            </button>
-            <button
-              onClick={() => setViewMode('preview')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest transition-colors cursor-pointer ${
-                viewMode === 'preview' ? 'text-white bg-white/10' : 'text-zinc-600 hover:text-zinc-300'
-              }`}
-            >
-              <Layers size={10} /> PREVIEW
-            </button>
-          </div>
         </div>
 
         {/* Right cluster */}
-        <div className="flex items-center gap-2">
-          {/* Undo / Redo */}
+        <div className="flex items-center gap-2 relative" ref={menuRef}>
+          {/* Menu button */}
           <button
-            onClick={handleUndo}
-            disabled={!canUndo}
-            title="Undo (Ctrl+Z)"
-            className={`p-1.5 transition-colors cursor-pointer ${canUndo ? 'text-zinc-400 hover:text-white' : 'text-zinc-700 cursor-not-allowed'}`}
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="p-1.5 text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center border border-transparent hover:border-white/10 hover:bg-white/5"
+            title="More actions"
           >
-            <CornerUpLeft size={13} />
-          </button>
-          <button
-            onClick={handleRedo}
-            disabled={!canRedo}
-            title="Redo (Ctrl+Y)"
-            className={`p-1.5 transition-colors cursor-pointer ${canRedo ? 'text-zinc-400 hover:text-white' : 'text-zinc-700 cursor-not-allowed'}`}
-          >
-            <CornerUpRight size={13} />
+            <MoreVertical size={14} />
           </button>
 
-          <div className="w-px h-4 bg-white/10 mx-1" />
+          {isMenuOpen && (
+            <div className="absolute top-[100%] right-0 mt-1 w-48 bg-[#121212] border border-[#333333] shadow-2xl z-50 py-1">
+              {/* Toggle view mode */}
+              <button
+                onClick={() => {
+                  setViewMode(viewMode === 'edit' ? 'preview' : 'edit');
+                  setIsMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold font-mono tracking-wider text-zinc-400 hover:bg-white hover:text-black transition-colors cursor-pointer"
+              >
+                {viewMode === 'edit' ? <Layers size={12} /> : <FileText size={12} />}
+                {viewMode === 'edit' ? 'PREVIEW MODE' : 'EDIT MODE'}
+              </button>
 
-          {/* BG image */}
-          <button
-            onClick={promptBgImage}
-            title="Set background image"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] text-zinc-500 hover:text-white tracking-widest border border-white/[0.06] hover:border-white/20 transition-all cursor-pointer"
-          >
-            <ImageIcon size={11} /> BG
-          </button>
+              <div className="h-px bg-white/5 my-1" />
 
-          {/* Delete */}
-          {note && (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              title="Delete note"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] text-red-600 hover:text-red-400 border border-red-900/30 hover:border-red-600/40 tracking-widest transition-all cursor-pointer"
-            >
-              <Trash2 size={11} />
-            </button>
+              {/* Undo */}
+              <button
+                onClick={() => {
+                  handleUndo();
+                  setIsMenuOpen(false);
+                }}
+                disabled={!canUndo}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold font-mono tracking-wider text-zinc-400 hover:bg-white hover:text-black transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <CornerUpLeft size={12} />
+                UNDO
+              </button>
+
+              {/* Redo */}
+              <button
+                onClick={() => {
+                  handleRedo();
+                  setIsMenuOpen(false);
+                }}
+                disabled={!canRedo}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold font-mono tracking-wider text-zinc-400 hover:bg-white hover:text-black transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <CornerUpRight size={12} />
+                REDO
+              </button>
+
+              <div className="h-px bg-white/5 my-1" />
+
+              {/* BG image */}
+              <button
+                onClick={() => {
+                  promptBgImage();
+                  setIsMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold font-mono tracking-wider text-zinc-400 hover:bg-white hover:text-black transition-colors cursor-pointer"
+              >
+                <ImageIcon size={12} />
+                SET_BACKGROUND
+              </button>
+
+              {/* Delete */}
+              {note && (
+                <>
+                  <div className="h-px bg-white/5 my-1" />
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold font-mono tracking-wider text-red-600 hover:bg-red-900/20 hover:text-red-400 transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={12} />
+                    DELETE_NOTE
+                  </button>
+                </>
+              )}
+            </div>
           )}
+
+          <div className="w-px h-4 bg-white/10 mx-1 shrink-0" />
 
           {/* Close */}
           <button
             onClick={handleSaveAndClose}
             title="Save and close"
-            className="p-1.5 text-zinc-600 hover:text-white transition-colors cursor-pointer ml-1"
+            className="p-1.5 text-zinc-600 hover:text-white transition-colors cursor-pointer"
           >
             <X size={14} />
           </button>

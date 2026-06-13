@@ -43,7 +43,7 @@ export const CategoryManager = ({
   return (
     <>
       <div className="fixed inset-0 bg-black/85 backdrop-blur-[2px] flex justify-center items-center z-[200]">
-        <div className="bg-[#090909] border border-[#333333] w-full max-w-[420px] p-6 font-mono select-none">
+        <div className="bg-[#090909] border border-[#333333] w-[calc(100%-2rem)] sm:w-full max-w-[420px] p-6 font-mono select-none">
 
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-bold tracking-wider text-white flex items-center gap-2">

@@ -239,18 +239,48 @@ function NotesApp({ user }: { user: User }) {
     <div className="bg-[#090909] text-white min-h-screen flex flex-col font-mono selection:bg-white selection:text-black">
 
       {/* Header */}
-      <header className="px-6 md:px-8 py-5 border-b border-[#333333] flex flex-col sm:flex-row justify-between items-center bg-[#090909] sticky top-0 z-50 select-none gap-4">
-        <div className="flex items-center gap-2.5 font-bold tracking-tight text-sm md:text-base select-none">
-          <span className="bg-white text-black px-1.5 py-0.5 text-xs font-black tracking-wide">#</span>
-          NOTES
+      <header className="px-6 md:px-8 py-4 md:py-5 border-b border-[#333333] flex flex-col sm:flex-row justify-between items-center bg-[#090909] sticky top-0 z-50 select-none gap-4">
+        {/* Brand & Mobile Actions */}
+        <div className="flex items-center justify-between w-full sm:w-auto">
+          <div className="flex items-center gap-2.5 font-bold tracking-tight text-sm md:text-base select-none">
+            <span className="bg-white text-black px-1.5 py-0.5 text-xs font-black tracking-wide">#</span>
+            NOTES
+          </div>
+
+          {/* Mobile Actions (Folder, Settings, New Entry) */}
+          <div className="flex items-center gap-2 sm:hidden">
+            <button
+              onClick={() => setIsCatManagerOpen(true)}
+              className="p-2 border border-[#333333] hover:border-white hover:bg-[#1a1a1a] transition-all duration-150 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+              title="Manage Categories"
+            >
+              <Folder size={14} />
+            </button>
+
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 border border-[#333333] hover:border-white hover:bg-[#1a1a1a] transition-all duration-150 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+              title="Settings"
+            >
+              <Settings size={14} />
+            </button>
+
+            <button
+              onClick={() => openEditor(null)}
+              className="bg-white text-black border border-white p-2 hover:opacity-90 active:scale-95 duration-100 flex items-center justify-center cursor-pointer"
+              title="New Entry"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
           {/* Category filter */}
-          <div className="relative" ref={dropdownRef}>
+          <div className="relative flex-1 sm:flex-initial" ref={dropdownRef}>
             <button
               onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-              className="flex items-center justify-between border border-[#333333] hover:border-white px-3 py-1.5 text-[11px] font-bold text-white uppercase font-mono tracking-wider min-w-[140px] bg-[#0c0c0c] cursor-pointer select-none outline-none transition-colors duration-150"
+              className="w-full sm:w-auto flex items-center justify-between border border-[#333333] hover:border-white px-3 py-1.5 text-[11px] font-bold text-white uppercase font-mono tracking-wider min-w-[140px] bg-[#0c0c0c] cursor-pointer select-none outline-none transition-colors duration-150"
             >
               <span className="truncate">{activeFilter}</span>
               <ChevronDown size={11} className="text-zinc-500 ml-2 shrink-0" />
@@ -275,7 +305,8 @@ function NotesApp({ user }: { user: User }) {
 
           <div className="w-[1px] h-4 bg-[#333333] hidden sm:block" />
 
-          <div className="flex items-center gap-2">
+          {/* Desktop Actions */}
+          <div className="hidden sm:flex items-center gap-2">
             <button
               onClick={() => setIsCatManagerOpen(true)}
               className="p-2 border border-[#333333] hover:border-white hover:bg-[#1a1a1a] transition-all duration-150 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"

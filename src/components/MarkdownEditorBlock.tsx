@@ -96,29 +96,63 @@ export const MarkdownEditorBlock: React.FC<MarkdownEditorBlockProps> = ({
 
   // ── FORMAT TOOLBAR ────────────────────────────────────────────
   const FormatBar = () => (
-    <div className="flex items-center gap-0.5 mb-2 select-none">
-      {([
-        ['bold',      <Bold size={11} />,     'Bold'],
-        ['italic',    <Italic size={11} />,   'Italic'],
-        ['h1',        <Hash size={11} />,     'H1'],
-        ['h2',        <span className="text-[9px] font-bold leading-none">H2</span>, 'H2'],
-        ['code',      <Code size={11} />,     'Inline code'],
-        ['codeblock', <Terminal size={11} />, 'Code block'],
-        ['quote',     <Quote size={11} />,    'Blockquote'],
-        ['link',      <Link size={11} />,     'Link'],
-      ] as [string, React.ReactNode, string][]).map(([key, icon, label]) => (
+    <div className="flex items-center justify-between mb-2 select-none w-full">
+      <div className="flex items-center gap-0.5">
+        {([
+          ['bold',      <Bold size={11} />,     'Bold'],
+          ['italic',    <Italic size={11} />,   'Italic'],
+          ['h1',        <Hash size={11} />,     'H1'],
+          ['h2',        <span className="text-[9px] font-bold leading-none">H2</span>, 'H2'],
+          ['code',      <Code size={11} />,     'Inline code'],
+          ['codeblock', <Terminal size={11} />, 'Code block'],
+          ['quote',     <Quote size={11} />,    'Blockquote'],
+          ['link',      <Link size={11} />,     'Link'],
+        ] as [string, React.ReactNode, string][]).map(([key, icon, label]) => (
+          <button
+            key={key}
+            type="button"
+            title={label}
+            onClick={() => insertFormat(key as Parameters<typeof insertFormat>[0])}
+            className="w-6 h-6 flex items-center justify-center text-zinc-600 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            {icon}
+          </button>
+        ))}
+        <div className="w-px h-3 bg-white/10 mx-1" />
+        <span className="text-[8px] text-zinc-700 tracking-widest">MD</span>
+      </div>
+
+      {/* Mobile-only block actions inside format bar */}
+      <div className="flex items-center gap-1 md:hidden">
+        {onMoveUp && index > 0 && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onMoveUp(); }}
+            title="Move up"
+            className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white cursor-pointer transition-colors"
+          >
+            <ArrowUp size={11} />
+          </button>
+        )}
+        {onMoveDown && index < totalBlocks - 1 && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onMoveDown(); }}
+            title="Move down"
+            className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white cursor-pointer transition-colors"
+          >
+            <ArrowDown size={11} />
+          </button>
+        )}
         <button
-          key={key}
           type="button"
-          title={label}
-          onClick={() => insertFormat(key as Parameters<typeof insertFormat>[0])}
-          className="w-6 h-6 flex items-center justify-center text-zinc-600 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+          title="Delete block"
+          className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-red-500 cursor-pointer transition-colors"
         >
-          {icon}
+          <Trash2 size={11} />
         </button>
-      ))}
-      <div className="w-px h-3 bg-white/10 mx-1" />
-      <span className="text-[8px] text-zinc-700 tracking-widest">MD</span>
+      </div>
     </div>
   );
 
@@ -131,7 +165,7 @@ export const MarkdownEditorBlock: React.FC<MarkdownEditorBlockProps> = ({
         onClick={onFocus}
       >
         {/* Left gutter */}
-        <div className="absolute -left-10 top-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 select-none">
+        <div className="hidden md:flex absolute -left-10 top-1 flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 select-none">
           {showDeleteConfirm ? (
             <div className="flex flex-col gap-1">
               <button onClick={e => { e.stopPropagation(); onDelete(); }} className="w-6 h-6 flex items-center justify-center text-red-500 hover:text-red-400 transition-colors cursor-pointer" title="Yes, delete">
@@ -213,7 +247,7 @@ export const MarkdownEditorBlock: React.FC<MarkdownEditorBlockProps> = ({
 
       <div className="relative flex items-start gap-3 px-2">
         {/* Left gutter */}
-        <div className="absolute -left-10 top-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 select-none">
+        <div className="hidden md:flex absolute -left-10 top-0 flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 select-none">
           {showDeleteConfirm ? (
             <div className="flex flex-col gap-1">
               <button onClick={() => onDelete()} className="w-6 h-6 flex items-center justify-center text-red-500 hover:text-red-400 transition-colors cursor-pointer" title="Yes, delete">
@@ -267,6 +301,40 @@ export const MarkdownEditorBlock: React.FC<MarkdownEditorBlockProps> = ({
             block.checked ? 'line-through text-zinc-600' : 'text-zinc-300'
           }`}
         />
+
+        {/* Mobile-only task block actions */}
+        {isActive && (
+          <div className="flex items-center gap-1 shrink-0 md:hidden ml-2">
+            {onMoveUp && index > 0 && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onMoveUp(); }}
+                title="Move up"
+                className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white cursor-pointer transition-colors"
+              >
+                <ArrowUp size={11} />
+              </button>
+            )}
+            {onMoveDown && index < totalBlocks - 1 && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onMoveDown(); }}
+                title="Move down"
+                className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white cursor-pointer transition-colors"
+              >
+                <ArrowDown size={11} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+              title="Delete block"
+              className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-red-500 cursor-pointer transition-colors"
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
