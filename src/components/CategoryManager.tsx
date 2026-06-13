@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Folder, Plus, Trash2, Edit2, X } from 'lucide-react';
+import { Folder, Plus, Trash2, Edit2, X, GripVertical } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import { InputDialog } from './InputDialog';
 
@@ -15,6 +15,7 @@ interface CategoryManagerProps {
   onAddCategory: (cat: string) => void;
   onRenameCategory: (oldCat: string, newCat: string) => void;
   onDeleteCategory: (cat: string) => void;
+  onReorderCategories: (cats: string[]) => void;
 }
 
 export const CategoryManager = ({
@@ -24,6 +25,7 @@ export const CategoryManager = ({
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
+  onReorderCategories,
 }: CategoryManagerProps) => {
   const [newCat, setNewCat] = useState('');
 
@@ -33,11 +35,60 @@ export const CategoryManager = ({
   // Rename dialog state
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
 
+  // Drag reordering states
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [touchDraggedIdx, setTouchDraggedIdx] = useState<number | null>(null);
+
   if (!isOpen) return null;
 
   const handleAdd = () => {
     const formatted = newCat.trim().toUpperCase();
     if (formatted) { onAddCategory(formatted); setNewCat(''); }
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === index) return;
+    const updated = [...categories];
+    const draggedItem = updated[draggedIdx];
+    updated.splice(draggedIdx, 1);
+    updated.splice(index, 0, draggedItem);
+    setDraggedIdx(index);
+    onReorderCategories(updated);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    setTouchDraggedIdx(index);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchDraggedIdx === null) return;
+    const touch = e.touches[0];
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!element) return;
+    const draggableRow = element.closest('[data-drag-index]');
+    if (!draggableRow) return;
+    const targetIdx = parseInt(draggableRow.getAttribute('data-drag-index') || '', 10);
+    if (isNaN(targetIdx) || targetIdx === touchDraggedIdx) return;
+    const updated = [...categories];
+    const draggedItem = updated[touchDraggedIdx];
+    updated.splice(touchDraggedIdx, 1);
+    updated.splice(targetIdx, 0, draggedItem);
+    setTouchDraggedIdx(targetIdx);
+    onReorderCategories(updated);
+  };
+
+  const handleTouchEnd = () => {
+    setTouchDraggedIdx(null);
   };
 
   return (
@@ -74,30 +125,51 @@ export const CategoryManager = ({
 
           {/* List */}
           <div className="max-h-[250px] overflow-y-auto mb-6 pr-1 space-y-1 scrollbar-mono">
-            {categories.map(cat => (
-              <div
-                key={cat}
-                className="flex justify-between items-center py-2.5 px-3 border-b border-[#1e1e1e] hover:bg-[#121212] group transition-colors duration-150"
-              >
-                <span className="text-xs font-bold text-zinc-400 group-hover:text-white transition-colors">{cat}</span>
-                <div className="flex gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => setRenameTarget(cat)}
-                    className="p-1.5 border border-[#333333] hover:border-white hover:bg-[#1e1e1e] transition-all text-zinc-400 hover:text-white cursor-pointer"
-                    title="Rename"
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                  <button
-                    onClick={() => setDeleteTarget(cat)}
-                    className="p-1.5 border border-red-950/40 hover:border-red-500 hover:bg-red-950/15 text-red-700 hover:text-red-400 transition-all cursor-pointer"
-                    title="Delete"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+            {categories.map((cat, idx) => {
+              const isDragged = draggedIdx === idx || touchDraggedIdx === idx;
+              return (
+                <div
+                  key={cat}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  onTouchStart={(e) => handleTouchStart(e, idx)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  data-drag-index={idx}
+                  className={`flex justify-between items-center py-2.5 px-3 border-b border-[#1e1e1e] hover:bg-[#121212] group transition-colors duration-150 cursor-grab active:cursor-grabbing select-none ${
+                    isDragged ? 'opacity-40 bg-[#1e1e1e]' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="text-zinc-600 group-hover:text-zinc-400 shrink-0">
+                      <GripVertical size={12} />
+                    </div>
+                    <span className="text-xs font-bold text-zinc-400 group-hover:text-white transition-colors truncate">
+                      {cat}
+                    </span>
+                  </div>
+
+                  <div className="flex gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={() => setRenameTarget(cat)}
+                      className="p-1.5 border border-[#333333] hover:border-white hover:bg-[#1e1e1e] transition-all text-zinc-400 hover:text-white cursor-pointer"
+                      title="Rename"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(cat)}
+                      className="p-1.5 border border-red-950/40 hover:border-red-500 hover:bg-red-950/15 text-red-700 hover:text-red-400 transition-all cursor-pointer"
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <button

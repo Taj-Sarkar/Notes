@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Folder, Plus, ChevronDown, Settings } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
@@ -275,12 +276,36 @@ function NotesApp({ user }: { user: User }) {
           </div>
         </div>
 
-        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
-          {/* Category filter */}
-          <div className="relative flex-1 sm:flex-initial" ref={dropdownRef}>
+        <div className="flex flex-col sm:flex-row items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+          {/* Mobile Sliding Categories Bar */}
+          <div className="flex sm:hidden items-center overflow-x-auto w-full no-scrollbar gap-6 py-2 select-none scroll-smooth">
+            {['ALL', ...categories].map(cat => (
+              <button
+                key={cat}
+                onClick={() => setActiveFilter(cat)}
+                className={`text-[11px] font-extrabold tracking-widest font-mono uppercase cursor-pointer transition-all duration-150 shrink-0 border-none bg-transparent p-0 relative pb-1 ${
+                  activeFilter === cat
+                    ? 'text-white'
+                    : 'text-zinc-600 hover:text-zinc-400'
+                }`}
+              >
+                {cat}
+                {activeFilter === cat && (
+                  <motion.span
+                    layoutId="activeUnderline"
+                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-white"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Desktop Category filter */}
+          <div className="relative hidden sm:block" ref={dropdownRef}>
             <button
               onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-              className="w-full sm:w-auto flex items-center justify-between border border-[#333333] hover:border-white px-3 py-1.5 text-[11px] font-bold text-white uppercase font-mono tracking-wider min-w-[140px] bg-[#0c0c0c] cursor-pointer select-none outline-none transition-colors duration-150"
+              className="flex items-center justify-between border border-[#333333] hover:border-white px-3 py-1.5 text-[11px] font-bold text-white uppercase font-mono tracking-wider min-w-[140px] bg-[#0c0c0c] cursor-pointer select-none outline-none transition-colors duration-150"
             >
               <span className="truncate">{activeFilter}</span>
               <ChevronDown size={11} className="text-zinc-500 ml-2 shrink-0" />
@@ -340,15 +365,28 @@ function NotesApp({ user }: { user: User }) {
             // NO_DATA_AVAILABLE
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
-            {filteredNotes.map(note => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onClick={() => openEditor(note)}
-              />
-            ))}
-          </div>
+          <motion.div
+            layout
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5"
+          >
+            <AnimatePresence mode="popLayout">
+              {filteredNotes.map(note => (
+                <motion.div
+                  key={note.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <NoteCard
+                    note={note}
+                    onClick={() => openEditor(note)}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
         )}
       </main>
 
@@ -359,6 +397,7 @@ function NotesApp({ user }: { user: User }) {
         onAddCategory={handleAddCategory}
         onRenameCategory={handleRenameCategory}
         onDeleteCategory={handleDeleteCategory}
+        onReorderCategories={persistCategories}
       />
 
       <SettingsPanel
