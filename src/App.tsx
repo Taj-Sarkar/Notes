@@ -164,6 +164,37 @@ function NotesApp({ user }: { user: User }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Swipe-to-switch category gestures on mobile
+  const allFilters = ['ALL', ...categories];
+  const currentIndex = allFilters.indexOf(activeFilter);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const diffX = touch.clientX - touchStartRef.current.x;
+    const diffY = touch.clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+
+    // Minimum X swipe of 50px, and horizontal distance must be larger than vertical scroll
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+      if (diffX < 0) {
+        // Swipe Left -> Next Category
+        const nextIndex = (currentIndex + 1) % allFilters.length;
+        setActiveFilter(allFilters[nextIndex]);
+      } else {
+        // Swipe Right -> Previous Category
+        const prevIndex = (currentIndex - 1 + allFilters.length) % allFilters.length;
+        setActiveFilter(allFilters[prevIndex]);
+      }
+    }
+  };
+
   // Modal state
   const [isCatManagerOpen, setIsCatManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen]     = useState(false);
@@ -359,7 +390,11 @@ function NotesApp({ user }: { user: User }) {
       </header>
 
       {/* Notes grid */}
-      <main className="flex-1 px-6 md:px-8 py-8">
+      <main
+        className="flex-1 px-6 md:px-8 py-8"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {filteredNotes.length === 0 ? (
           <div className="text-center text-[#444444] font-bold text-xs tracking-widest mt-24 select-none">
             // NO_DATA_AVAILABLE
